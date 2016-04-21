@@ -210,27 +210,38 @@ function pageno_to_top_line(pageno) {
 	return (pageno - 1) * page_length;
 }
 
-function perform_search(dirty_query) {
+function perform_search(dirty_query, line_array, chapters_array) {
+    
+    // multithreaded function is not scope-aware, so must redefine 
+    // some globals in here
+    var page_length = 35;
 
+    function lineno_to_chapter_index(lineno) {
+        for (var i = chapters_array.length - 1; i >= 0; --i) {
+            if (chapters_array[i].lineno <= lineno) {
+                return i;
+            }
+        }
+        return 0;
+    }
+
+    function lineno_to_pageno(lineno) {
+        return Math.floor(lineno / page_length + 1);
+    }
+
+    function pageno_to_top_line(pageno) {
+        return (pageno - 1) * page_length;
+    }
 	var query = dirty_query.replace(/^[.,"':;!?()_-]+|[.,"';:!?()_-]+$/g, "");
 
 	if (! /\S/.test(query)) {
 		return;
 	}
 
-	// hide the old stuff, show the new
-	$("#search-img").hide();
-	$("#result-table").show();
-	$("#result-table-header").show();
-
-	$("#search-term").text(query);
- 
-	var table_body = $("#table-body");
-
 	var punctuation = String.raw`[\.,"':;!\?\(\)\_-]{0,2}`;
 
 	// regex magic
-	var query_regex = new RegExp("\\b" + punctuation + query + punctuation + "\\b", "gi")
+	var query_regex = new RegExp("\\b" + punctuation + query + punctuation + "\\b", "gi");
 
 	var linked_query = "<a class=\"result-word\">" + query.split(" ").join(punctuation + "</a> <a class=\"result-word\">") + punctuation + "</a>";
 	current_linked_query_regex = new RegExp(linked_query, "gi");
@@ -247,7 +258,7 @@ function perform_search(dirty_query) {
 
 			while (m_arr = current_linked_query_regex.exec(linked_line)) {
 
-				count++
+				count++;;
 
 				var pos = m_arr.index;
 				linked_line = [linked_line.slice(0, pos), "<mark class=\"searched-word\">", linked_line.slice(pos)].join('');
@@ -279,6 +290,23 @@ function perform_search(dirty_query) {
 
 		}
 	});
+    return [table, count, query];
+}
+
+function show_search_results(results) {
+
+    var table = results[0];
+    var count = results[1];
+    var query = results[2];
+
+    // hide the old stuff, show the new
+	$("#search-img").hide();
+	$("#result-table").show();
+	$("#result-table-header").show();
+
+	$("#search-term").text(query);
+ 
+	var table_body = $("#table-body");
 
 	// add table to DOM
 	table_body.html(table)
@@ -315,23 +343,25 @@ function perform_search(dirty_query) {
 	});
 
 	// manipulates the url
-	window.history.pushState(query, "", "?query=" + query);
+	//window.history.pushState(query, "", "?query=" + query);
 
 	load_page(current_top_line);
 }
 
-function perform_search_wrapper(query)
-{
-	$(".se-pre-con").show();
+var MT = new Multithread(4)
+var multithread_search = MT.process(perform_search, show_search_results);
 
-	setTimeout(perform_search, 50, query);
+function perform_search_wrapper(query) {
+	//$(".se-pre-con").show();
 
-	$(".se-pre-con").fadeOut("fast");
+	setTimeout(multithread_search, 50, query, line_array, chapters_array);
+
+	//$(".se-pre-con").fadeOut("fast");
 
 }
 
 // links up the back/foward button to searches
-window.onpopstate = function(e){
+window.onpopstate = function(e) {
     if(e.state){
         perform_search_wrapper(e.state);
     }
